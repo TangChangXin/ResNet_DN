@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch
-
+from torchsummary import summary
 
 # 参考 https://github.com/WZMIAOMIAO/deep-learning-for-image-processing/blob/master/pytorch_classification/Test5_resnet/model.py
 class BasicBlock(nn.Module):
@@ -107,6 +107,7 @@ class ResNet(nn.Module):
         self.bn1 = nn.BatchNorm2d(self.in_channel)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
         self.layer1 = self._make_layer(block, 64, blocks_num[0])
         self.layer2 = self._make_layer(block, 128, blocks_num[1], stride=2)
         self.layer3 = self._make_layer(block, 256, blocks_num[2], stride=2)
@@ -196,3 +197,11 @@ def resnext101_32x8d(num_classes=1000, include_top=True):
                   include_top=include_top,
                   groups=groups,
                   width_per_group=width_per_group)
+
+
+if __name__ == "__main__":
+    测试模型 = resnet50()
+    测试模型.to(torch.device('cuda:0'))
+    print(测试模型)
+    print('\n')
+    summary(测试模型, (3, 224, 224), batch_size=1)
