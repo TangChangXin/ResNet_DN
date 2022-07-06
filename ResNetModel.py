@@ -102,6 +102,10 @@ class ResNet(nn.Module):
         self.groups = groups
         self.width_per_group = width_per_group
 
+        # 将图像调整至合适的大小
+        self.前置卷积1 = nn.Conv2d(1, 3, kernel_size=7, stride=2, padding=3, bias=False)
+        self.前置卷积2 = nn.Conv2d(3, 3, kernel_size=7, stride=2, padding=3, bias=False)
+
         self.conv1 = nn.Conv2d(3, self.in_channel, kernel_size=7, stride=2,
                                padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(self.in_channel)
@@ -144,6 +148,8 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
+        x = self.前置卷积1(x)
+        x = self.前置卷积2(x)
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -162,6 +168,101 @@ class ResNet(nn.Module):
         return x
 
 
+
+class LKResNet(nn.Module):
+    """
+    前置大卷积核
+    """
+    def __init__(self,
+                 block,
+                 blocks_num,
+                 num_classes=1000,
+                 include_top=True,
+                 groups=1,
+                 width_per_group=64):
+        super(LKResNet, self).__init__()
+        self.include_top = include_top
+        self.in_channel = 64
+
+        self.groups = groups
+        self.width_per_group = width_per_group
+
+        # 将图像调整至合适的大小
+        self.前置卷积1 = nn.Conv2d(1, 3, kernel_size=31, stride=1, padding=15, bias=False)
+        self.前置卷积2 = nn.Conv2d(3, 3, kernel_size=31, stride=1, padding=15, bias=False)
+        self.前置卷积3 = nn.Conv2d(3, 3, kernel_size=31, stride=2, bias=False)
+
+        self.前置卷积4 = nn.Conv2d(3, 3, kernel_size=17, stride=1, padding=8, bias=False)
+        self.前置卷积5 = nn.Conv2d(3, 3, kernel_size=17, stride=1, padding=8, bias=False)
+        self.前置卷积6 = nn.Conv2d(3, 3, kernel_size=17, stride=2, bias=False)
+
+        self.conv1 = nn.Conv2d(3, self.in_channel, kernel_size=7, stride=2,
+                               padding=3, bias=False)
+        self.bn1 = nn.BatchNorm2d(self.in_channel)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+        self.layer1 = self._make_layer(block, 64, blocks_num[0])
+        self.layer2 = self._make_layer(block, 128, blocks_num[1], stride=2)
+        self.layer3 = self._make_layer(block, 256, blocks_num[2], stride=2)
+        self.layer4 = self._make_layer(block, 512, blocks_num[3], stride=2)
+        if self.include_top:
+            self.avgpool = nn.AdaptiveAvgPool2d((1, 1))  # output size = (1, 1)
+            self.fc = nn.Linear(512 * block.expansion, num_classes)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+
+    def _make_layer(self, block, channel, block_num, stride=1):
+        downsample = None
+        if stride != 1 or self.in_channel != channel * block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv2d(self.in_channel, channel * block.expansion, kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(channel * block.expansion))
+
+        layers = [block(self.in_channel,
+                        channel,
+                        downsample=downsample,
+                        stride=stride,
+                        groups=self.groups,
+                        width_per_group=self.width_per_group)]
+        self.in_channel = channel * block.expansion
+
+        for _ in range(1, block_num):
+            layers.append(block(self.in_channel,
+                                channel,
+                                groups=self.groups,
+                                width_per_group=self.width_per_group))
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.前置卷积1(x)
+        x = self.前置卷积2(x)
+        x = self.前置卷积3(x)
+        x = self.前置卷积4(x)
+        x = self.前置卷积5(x)
+        x = self.前置卷积6(x)
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        if self.include_top:
+            x = self.avgpool(x)
+            x = torch.flatten(x, 1)
+            x = self.fc(x)
+
+        return x
+
+
+
 def resnet34(num_classes=1000, include_top=True):
     # https://download.pytorch.org/models/resnet34-333f7ec4.pth
     return ResNet(BasicBlock, [3, 4, 6, 3], num_classes=num_classes, include_top=include_top)
@@ -170,6 +271,11 @@ def resnet34(num_classes=1000, include_top=True):
 def resnet50(num_classes=1000, include_top=True):
     # https://download.pytorch.org/models/resnet50-19c8e357.pth
     return ResNet(Bottleneck, [3, 4, 6, 3], num_classes=num_classes, include_top=include_top)
+
+
+def LKresnet50(num_classes=1000, include_top=True):
+    # https://download.pytorch.org/models/resnet50-19c8e357.pth
+    return LKResNet(Bottleneck, [3, 4, 6, 3], num_classes=num_classes, include_top=include_top)
 
 
 def resnet101(num_classes=1000, include_top=True):
@@ -201,7 +307,8 @@ def resnext101_32x8d(num_classes=1000, include_top=True):
 
 if __name__ == "__main__":
     测试模型 = resnet50()
+    # 测试模型 = LKresnet50(2)
     测试模型.to(torch.device('cuda:0'))
-    print(测试模型)
+    # print(测试模型)
     print('\n')
-    summary(测试模型, (3, 224, 224), batch_size=1)
+    summary(测试模型, (1, 868, 868), batch_size=1)
